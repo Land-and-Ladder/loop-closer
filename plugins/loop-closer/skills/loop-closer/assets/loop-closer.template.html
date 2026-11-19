@@ -190,12 +190,27 @@ body.shake{animation:bodyshake .4s}
 .cta{border:2px solid var(--ink);border-radius:10px;padding:10px 12px;background:var(--lilac);font-size:13px;display:flex;flex-direction:column;gap:8px}
 .cta a.btn{align-self:flex-start;background:var(--ink);color:var(--ground);text-decoration:none;border-radius:100px;padding:7px 14px;font-family:var(--mono);font-size:12px}
 #helpCredit a{color:var(--cobalt)}
+/* TTT additions */
+.date.sync{margin-top:2px}
+.snap{display:flex;flex-direction:column;gap:8px}
+.sheet label.snapbtn{display:block;text-align:center;cursor:pointer}
+.rv{display:flex;flex-direction:column;gap:8px}
+.rvhead{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.rvrow{display:flex;gap:10px;align-items:flex-start;border:2px solid var(--ink);border-radius:10px;padding:8px 10px;background:var(--card);cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit}
+.rvrow.sub{margin-left:14px;width:calc(100% - 14px)}
+.rvrow.off{opacity:.45;background:#fff}
+.rvrow.off .rvt b{text-decoration:line-through}
+.rvrow .rvk{font-family:var(--mono);font-size:14px;width:18px;flex:none}
+.rvrow .rvt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;font-size:14px}
+.rvrow .rvt .note{font-size:11px}
+.rvrow .chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:45%}
+.empty .snapgo{background:var(--cobalt);color:#fff;border:3px solid var(--ink);border-radius:12px;padding:10px 14px;font-family:var(--display);font-size:13px;box-shadow:4px 4px 0 var(--ink)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
 <div class="app">
   <div class="marquee">
-    <div><h1 id="h1">Loop Closer</h1><div class="date" id="dateLine"></div></div>
+    <div><h1 id="h1">Loop Closer</h1><div class="date" id="dateLine"></div><div class="date sync" id="syncNote" hidden></div></div>
     <div class="clock" id="clock">--:--</div>
   </div>
 
@@ -310,11 +325,25 @@ body.shake{animation:bodyshake .4s}
 <!-- ADD -->
 <div class="overlay" id="add"><div class="sheet">
   <h3>Dump your list</h3>
-  <p>One per line. They go on top. Prefix with <code>!</code> for a boss.</p>
-  <p class="note">Got a deck from a chat? Paste the whole JSON block here instead and it replaces this deck. <a href="chat.html" id="chatHow">How to get one</a>.</p>
+  <div class="snap" id="tttSnap" hidden>
+    <label class="primary snapbtn" for="snapFile">📷 SNAP MY LIST</label>
+    <input type="file" id="snapFile" accept="image/*" hidden>
+    <p class="note">A photo of your handwritten list. Claude reads it, sizes each card, writes the first move, splits big jobs into steps, and spots repeats. You approve before anything is dealt.</p>
+  </div>
+  <p class="note busy" id="addBusy" hidden>Reading your list…</p>
+  <p id="addHow">One per line. They go on top. Prefix with <code>!</code> for a boss.</p>
+  <p class="note" id="addChat">Got a deck from a chat? Paste the whole JSON block here instead and it replaces this deck. <a href="chat.html" id="chatHow">How to get one</a>.</p>
   <textarea id="addText" placeholder="Reply to that email&#10;!Finish the deck for Tuesday&#10;Book the dentist"></textarea>
   <div class="pills"><span class="note" style="align-self:center">Default size:</span><button data-s="S" class="on">S · 5m</button><button data-s="M">M · 15m</button><button data-s="L">L · 30m</button></div>
-  <div class="row"><button class="primary" id="addGo">ADD TO DECK</button><button class="ghost" id="addClose">close</button></div>
+  <div class="row"><button class="primary" id="addGo">ADD TO DECK</button><button class="ghost" id="addClaude" hidden>✨ sort it with Claude</button><button class="ghost" id="addClose">close</button></div>
+</div></div>
+
+<!-- TTT: REVIEW what Claude read before anything is dealt -->
+<div class="overlay" id="review"><div class="sheet">
+  <h3>Here's what I read</h3>
+  <p class="note">Tap a row to drop it. Tap a size to change it. Nothing is dealt until you say so.</p>
+  <div class="rv" id="rvList"></div>
+  <div class="row"><button class="primary" id="rvGo">DEAL THESE</button><button class="ghost" id="rvClose">cancel</button></div>
 </div></div>
 
 <!-- HELP -->
@@ -356,8 +385,14 @@ const BASE_CFG=__CONFIG__;
 // A deck pasted from any chat (see CHAT.md) is stored by "dump my list" and dealt here instead of the built-in one.
 // No Python on the machine? The skill pastes the raw deck in as BASE_CFG, and it's dealt here with build.py's rules
 // (dateLine is only ever set by build.py, so its absence marks a raw deck).
-const BUILT_CFG=(BASE_CFG.dateLine||!Array.isArray(BASE_CFG.cards))?BASE_CFG:Object.assign(dealImported(BASE_CFG,{bundle:[{key:'coffee',label:'☕ coffee'},{key:'playlist',label:'🎧 the playlist'},{key:'snack',label:'🍫 snack'},{key:'sun',label:'☀️ window seat'}],rounds:{morning:"Morning. Whole day is yours now. Texts, then the quick replies. Build the combo.",midday:"Early afternoon. Mediums and one large. One card, one timer.",afternoon:"Late afternoon. Boss window. Take the big one while the energy holds.",night:"Evening. Whatever's due is the only card that matters. Then cash out."}}),{tagline:BASE_CFG.tagline||'Task Tinder, jacked',imported:false},BASE_CFG.setupSummary?{setupSummary:BASE_CFG.setupSummary}:{});
-const CFG=(function(){let imp=null;try{imp=JSON.parse(localStorage.getItem('loop-closer-import')||'null')}catch(e){}if(!imp||!Array.isArray(imp.cards)||!imp.cards.length)return BUILT_CFG;try{return dealImported(imp,BUILT_CFG)}catch(e){return BUILT_CFG}})();
+const DEFAULTS={bundle:[{key:'coffee',label:'☕ coffee'},{key:'playlist',label:'🎧 the playlist'},{key:'snack',label:'🍫 snack'},{key:'sun',label:'☀️ window seat'}],rounds:{morning:"Morning. Whole day is yours now. Texts, then the quick replies. Build the combo.",midday:"Early afternoon. Mediums and one large. One card, one timer.",afternoon:"Late afternoon. Boss window. Take the big one while the energy holds.",night:"Evening. Whatever's due is the only card that matters. Then cash out."}};
+// TTT (Neal's fork): with "app":true nothing is baked in. Tasks live in the artifact database; see the TTT block.
+const APP=!!BASE_CFG.app;
+const BUILT_CFG=APP?appCfg():(BASE_CFG.dateLine||!Array.isArray(BASE_CFG.cards))?BASE_CFG:Object.assign(dealImported(BASE_CFG,DEFAULTS),{tagline:BASE_CFG.tagline||'Task Tinder, jacked',imported:false},BASE_CFG.setupSummary?{setupSummary:BASE_CFG.setupSummary}:{});
+function todayStr(d){d=d||new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function goalsFor(n){const goals=[];[.22,.35,.55].forEach(f=>{const g=Math.max(1,Math.min(n,Math.ceil(n*f)));if(!goals.includes(g))goals.push(g)});while(goals.length<3&&goals[goals.length-1]<n)goals.push(goals[goals.length-1]+1);return goals.slice(0,3)}
+function appCfg(){const d=new Date();return Object.assign({},DEFAULTS,BASE_CFG,{title:BASE_CFG.title||'Loop Closer',tagline:BASE_CFG.tagline||'Task Tinder, jacked',day:todayStr(d),dateLine:d.toLocaleDateString('en-US',{weekday:'short'})+' · '+d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),goals:[1],anchor:null,cards:[],imported:false,setupSummary:''})}
+const CFG=APP?BUILT_CFG:(function(){let imp=null;try{imp=JSON.parse(localStorage.getItem('loop-closer-import')||'null')}catch(e){}if(!imp||!Array.isArray(imp.cards)||!imp.cards.length)return BUILT_CFG;try{return dealImported(imp,BUILT_CFG)}catch(e){return BUILT_CFG}})();
 function dealImported(deck,base){
   const SIZES={S:0,M:1,L:2,BOSS:3};const used=new Set();
   const slug=t=>{const b=String(t).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,40)||'card';let o=b,n=2;while(used.has(o)){o=b+'-'+n;n++}used.add(o);return o};
@@ -411,7 +446,7 @@ const HACKS=[
  ['Tab-title timer + wake lock + haptics','The countdown lives in the browser tab so you see it from your inbox. Screen stays on, phone buzzes on clears.'],
 ];
 const KEY='loop-closer-'+CFG.day;
-const ANCHOR=CFG.anchor||null;
+let ANCHOR=CFG.anchor||null;
 
 // ───────────────────────── STATE ─────────────────────────
 let S=load()||{};
@@ -424,7 +459,7 @@ let timerIv=null,timerEnd=0,timerMin=10,timerStart=0,focusCard=null,lastCleared=
 let db=null,dbDoc=null,wakeLock=null,recessIv=null;
 
 function load(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} if(dbDoc){dbDoc.set({day:CFG.day,title:CFG.title,goal:S.goal,stake:S.stake,xp:S.xp,tix:S.tix,done:S.done,shelved:S.shelved,skips:S.skips,custom:S.custom,parked:S.parked,updatedAt:new Date().toISOString()}).catch(()=>{})}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){} if(dbDoc&&!APP){dbDoc.set({day:CFG.day,title:CFG.title,goal:S.goal,stake:S.stake,xp:S.xp,tix:S.tix,done:S.done,shelved:S.shelved,skips:S.skips,custom:S.custom,parked:S.parked,updatedAt:new Date().toISOString()}).catch(()=>{})}}
 function shuf(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function level(xp){let li=0;for(let i=0;i<LEVELS.length;i++)if(xp>=LEVELS[i][0])li=i;return li}
 function mult(){let m=S.combo>=6?3:S.combo>=4?2:S.combo>=2?1.5:1;if(Date.now()<S.surgeUntil)m*=2;if(Date.now()<S.hardUntil)m*=1.5;return Math.round(m*10)/10}
@@ -506,7 +541,7 @@ function cardHtml(c,cls){
   const skips=S.skips[c.id]||0;const href=safeHref(c.link);
   return `<div class="card ${cls} ${themeOf(c.id)}" data-id="${esc(c.id)}">
     <span class="stamp go">GO</span><span class="stamp nah">NAH</span>
-    <div class="meta"><span class="chip ${c.size}">${c.size==='BOSS'?'☠ boss':c.size+' · '+({S:'5m',M:'15m',L:'30m'}[c.size])}</span>${S.stake===c.id?'<span class="chip due">🎯 your pick</span>':''}${c.due?`<span class="chip due">${esc(c.due)}</span>`:''}${c.live?'<span class="chip live">added live</span>':''}${c.tag?`<span class="chip">${esc(c.tag)}</span>`:''}${c.added?'<span class="chip opened">Claude add</span>':''}${S.opened[c.id]?'<span class="chip opened">opened</span>':''}${skips>1?`<span class="chip">passed ×${skips}</span>`:''}</div>
+    <div class="meta"><span class="chip ${c.size}">${c.size==='BOSS'?'☠ boss':c.size+' · '+({S:'5m',M:'15m',L:'30m'}[c.size])}</span>${S.stake===c.id?'<span class="chip due">🎯 your pick</span>':''}${c.due?`<span class="chip due">${esc(c.due)}</span>`:''}${c.live?'<span class="chip live">added live</span>':''}${c.tag?`<span class="chip">${esc(c.tag)}</span>`:''}${c.added?'<span class="chip opened">Claude add</span>':''}${c.age>=2?`<span class="chip">day ${c.age}</span>`:''}${S.opened[c.id]?'<span class="chip opened">opened</span>':''}${skips>1?`<span class="chip">passed ×${skips}</span>`:''}</div>
     <h2>${esc(c.title)}</h2>
     ${c.first?`<div class="first"><b>${c.size==='S'?'2-min rule · just do it':'First move'}</b>${esc(c.first)}</div>`:''}
     <div class="foot"><span>${href?`<a class="open" href="${esc(href)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">↗ open</a>`:(c.why?esc(c.why):(c.size==='BOSS'?'shrink it if it\'s scary':'smaller than it looks'))}</span><span class="xp">+${Math.round(XP[c.size]*mult())} XP</span></div>
@@ -514,6 +549,7 @@ function cardHtml(c,cls){
 }
 function renderStack(){
   const q=queue(),c=cards(),st=$('stack');
+  if(!q.length&&APP&&!SEED.length){st.innerHTML=T.emptyHtml();current=null;$('btnShrink').hidden=true;$('btnGo').disabled=true;$('btnNah').disabled=true;renderStrip();coach();return}
   if(!q.length){st.innerHTML=`<div class="empty"><h3>DECK CLEARED</h3><p>${cleared()} down. ${S.shelved.length?S.shelved.length+' shelved for another day. ':''}Dump more or cash out.</p></div>`;current=null;$('btnShrink').hidden=true;$('btnGo').disabled=true;$('btnNah').disabled=true;renderStrip();coach();return}
   $('btnGo').disabled=false;$('btnNah').disabled=Date.now()<S.hardUntil;
   current=c[q[0]];
@@ -550,12 +586,12 @@ const topEl=()=>document.querySelector('.card.top');
 function nahCard(){
   if(!current)return;if(Date.now()<S.hardUntil){toast('Hard mode. No passes. You chose this.');renderStack();return}
   const id=current.id;snd.skip();S.skips[id]=(S.skips[id]||0)+1;S.skipRun++;
-  S.order=S.order.filter(x=>x!==id);S.order.push(id);
+  S.order=S.order.filter(x=>x!==id);S.order.push(id);T.act({t:'skip',id});
   if(S.skipRun>=3){S.skipRun=0;dealer(true)}
   save();renderStack();
 }
-function dealer(auto){const q=queue(),c=cards();if(!q.length)return;const pool=q.filter(id=>!(S.skips[id]>=3));const pick=(pool.length?pool:q).slice().sort((a,b)=>(XP[c[a].size]+(S.skips[a]||0)*5)-(XP[c[b].size]+(S.skips[b]||0)*5))[0];S.order=S.order.filter(x=>x!==pick);S.order.unshift(pick);save();renderStack();toast(auto?'Dealer\'s choice. Smallest card on top. Just this one.':'Dealt. Don\'t evaluate it. Go.');if(!auto)setTimeout(()=>$('btnGo').click(),500)}
-function goCard(){if(!current)return;S.skipRun=0;openFocus(current)}
+function dealer(auto){const q=queue(),c=cards();if(!q.length)return;const pool=q.filter(id=>!(S.skips[id]>=3));const pick=(pool.length?pool:q).slice().sort((a,b)=>(XP[c[a].size]+(S.skips[a]||0)*5)-(XP[c[b].size]+(S.skips[b]||0)*5))[0];S.order=S.order.filter(x=>x!==pick);S.order.unshift(pick);T.act({t:'top',id:pick,why:auto?'auto':'dice'});save();renderStack();toast(auto?'Dealer\'s choice. Smallest card on top. Just this one.':'Dealt. Don\'t evaluate it. Go.');if(!auto)setTimeout(()=>$('btnGo').click(),500)}
+function goCard(){if(!current)return;S.skipRun=0;T.act({t:'go',id:current.id});openFocus(current)}
 document.getElementById('stack').addEventListener('click',e=>{const top=e.target.closest('.card.top');if(!top||e.target.closest('a')||Math.abs(dx)>6)return;if(top._t){clearTimeout(top._t);top._t=null;goCard()}else{top._t=setTimeout(()=>{top._t=null},350)}});
 async function openFocus(c,awfulMove){
   focusCard=c;$('fTitle').textContent=c.title;$('fFirst').textContent=awfulMove||c.first||'Open the thing. Look at it. That counts as starting.';$('fNote').value='';$('fPark').value='';
@@ -591,13 +627,14 @@ function completeCard(mode){
   const entry={id:c.id,title:c.title,size:c.size,xp:gained,mode:mode==='chip'?'chip':'done',note,at:new Date().toISOString(),beat};
   if(mode==='chip'){S.done.push(entry)}else{S.combo++;S.lastDoneAt=Date.now();S.sinceRecess++;S.done.push(entry)}
   S.xp+=gained;S.tix+=tix;lastCleared=c;
+  T.act({t:'done',id:c.id,title:c.title,size:c.size,xp:gained,tix,mode:entry.mode,note,beat});T.taskDone(c,entry.mode);
   const after=level(S.xp);const goalNow=!goalBefore&&cleared()>=goal;
   closeFocus();save();buzz(c.size==='BOSS'?[80,40,80,40,200]:[60]);
   showReward(gained,tix,jack,after>before?LEVELS[after][1]:null,mode,c,beat?bonus:0,goalNow);
   if(wasPick)setTimeout(()=>toast('🎯 That was the one you wanted gone. It\'s gone. +20.'),1200);
   renderAll();
 }
-function shelveCard(){const c=focusCard;if(!c)return;S.shelved.push(c.id);closeFocus();save();toast('Shelved. It\'ll be there. Not today is a real answer.');renderAll()}
+function shelveCard(){const c=focusCard;if(!c)return;S.shelved.push(c.id);T.act({t:'shelve',id:c.id});closeFocus();save();toast('Shelved. It\'ll be there. Not today is a real answer.');renderAll()}
 function showReward(xp,tix,jack,lvl,mode,c,bonus,goalNow){
   const r=$('reward');$('rXp').textContent='+'+xp;
   const subs=mode==='chip'?['CHIPPED','FIRST MOVE MADE','THAT COUNTS']:goalNow?['GOAL. HIT.','YOU SAID '+S.goal+'. YOU DID '+S.goal+'.']:c.size==='BOSS'?['BOSS DOWN','YOU ABSOLUTE MENACE','SLAIN']:S.combo>=4?['ON FIRE','UNSTOPPABLE','COMBO ×'+mult()]:['CLEARED','GONE','SENT IT','LOOP CLOSED','BYE'];
@@ -630,6 +667,7 @@ let addSize='S';
 function parseDeck(raw){const a=raw.indexOf('{'),b=raw.lastIndexOf('}');if(a<0||b<=a)return null;const j=raw.slice(a,b+1);try{return JSON.parse(j)}catch(e){}try{return JSON.parse(j.replace(/[“”„‟″]/g,'"').replace(/[‘’]/g,"'"))}catch(e){}return null}
 function addCards(){
   const raw=$('addText').value.trim();
+  if(APP){T.addPlain(raw);return}
   if(raw.startsWith('{')||raw.startsWith('```')||/["“]cards["”]\s*:/.test(raw)){const deck=parseDeck(raw);if(deck===null){toast('That JSON didn\'t parse. Copy the whole block from the chat, from the first { to the last }.');return}
     if(!deck||!Array.isArray(deck.cards)||!deck.cards.length){toast('No cards in that deck. It needs a "cards" list.');return}
     try{localStorage.setItem('loop-closer-import',JSON.stringify(deck))}catch(e){toast('Browser storage is off here, so a pasted deck can\'t stick.');return}
@@ -646,12 +684,215 @@ function openCash(){
   const hardest=S.done.filter(d=>d.mode==='done').sort((a,b)=>XP[b.size]-XP[a.size])[0];
   $('cLine').textContent=!S.done.length?'Nothing yet. That\'s fine. Go swipe one small one and come back.':`Level ${li+1}, ${LEVELS[li][1]}. ${cleared()} cleared of a goal of ${goal}${boss?', '+boss+' boss'+(boss>1?'es':'')+' down':''}${chips?', '+chips+' first-moves made':''}${S.shelved.length?', '+S.shelved.length+' shelved on purpose':''}.${hardest?' Hardest thing you did: "'+hardest.title.split('(')[0].trim()+'."':''} Read the list slowly.`;
   $('cList').innerHTML=S.done.slice().reverse().map(d=>`<div class="r"><span>${d.mode==='chip'?'◐ ':'✓ '}${esc(d.title)}${d.note?` <span class="note">— ${esc(d.note)}</span>`:''}</span><span class="x">+${d.xp}</span></div>`).join('');
-  $('cSave').textContent=(dbDoc?'Saved to this page\'s store. Claude can read it back.':'Saved in this browser only. Copy the recap and paste it to Claude.')+'';
+  $('cSave').textContent=APP?T.saveNote():(dbDoc?'Saved to this page\'s store. Claude can read it back.':'Saved in this browser only. Copy the recap and paste it to Claude.')+'';
   const pk=S.stake?cards()[S.stake]:null;if(pk){const got=S.done.some(d=>d.id===S.stake&&d.mode==='done');$('cLine').textContent+=got?' 🎯 The one you wanted gone is gone.':' 🎯 Still open: "'+pk.title.split('(')[0].trim()+'." That\'s tomorrow\'s first card, not a failure.'}
   $('cash').classList.add('on');
 }
 function recapText(){const goal=S.goal||CFG.goals[1]||1;return `${CFG.title} · ${CFG.dateLine}\nXP ${S.xp} · ${cleared()}/${goal} cleared · ${S.tix} tickets\n\n`+S.done.map(d=>(d.mode==='chip'?'◐ ':'✓ ')+d.title+(d.note?' — '+d.note:'')).join('\n')+(S.shelved.length?'\n\nShelved: '+S.shelved.map(id=>(cards()[id]||{}).title).filter(Boolean).join(' · '):'')+(S.parked.length?'\n\nParked thoughts: '+S.parked.join(' · '):'')}
 function bragText(){const c=lastCleared;return c?`Just cleared "${c.title.split('(')[0].trim()}" that I'd been putting off. ${cleared()} down today. 🎟`:recapText()}
+
+// ───────────────────────── TTT: the deck lives in the artifact database ─────────────────────────
+// Neal's fork (github.com/Land-and-Ladder/loop-closer, branch ttt). Only active with "app":true.
+// tasks/<id>                       one document per task; survives across days
+// days/<day>/devices/<device>      that device's actions today, appended only by that device
+// Every device folds all devices' actions into the same state, so phone and Mac stay in sync
+// without overwriting each other. The action log doubles as the usage log for later review.
+const T=(function(){
+  const noop={act(){},taskDone(){},start(){},addPlain(){},emptyHtml(){return ''},saveNote(){return ''}};
+  if(!APP)return noop;
+  const today=CFG.day,SIZE_I={S:0,M:1,L:2,BOSS:3};
+  const rid=()=>Math.random().toString(36).slice(2,10);
+  const devId=(()=>{try{let v=localStorage.getItem('ttt-device');if(!v){v='d'+rid();localStorage.setItem('ttt-device',v)}return v}catch(e){return 'd'+rid()}})();
+  const ACT_KEY='ttt-acts-'+today;
+  let mine=[];try{mine=JSON.parse(localStorage.getItem(ACT_KEY)||'[]')||[]}catch(e){}
+  let seq=mine.reduce((m,a)=>Math.max(m,a.n||0),0)+1;
+  const others={};let openMap=new Map(),doneMap=new Map();
+  let db=null,sample=null,canImages=false,myDoc=null,writing=false,dirty=false,state='loading',loaded={open:false,done:false,acts:false},pending=null,setupShown=false;
+
+  const addDays=(s,n)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return todayStr(d)};
+  const isDate=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s);
+  const dayName=s=>s===today?'today':s===addDays(today,1)?'tomorrow':new Date(s+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'});
+  function dueLabel(d){if(!d)return '';if(d<today)return 'overdue';if(d===today)return 'due today';return 'due '+dayName(d)}
+  const ageOf=t=>new Set(t.days||[]).size;
+  const allTasks=()=>{const m=new Map(openMap);doneMap.forEach((v,k)=>m.set(k,v));return m};
+
+  // Which tasks are on today's deck: written on today's list, planned for today (or a missed earlier
+  // plan), due by tomorrow, or already finished today.
+  function inToday(t){if(t.doneDay===today)return true;if(t.status!=='open')return false;
+    return (t.days||[]).includes(today)||(isDate(t.plan)&&t.plan<=today)||(isDate(t.due)&&t.due<=addDays(today,1))}
+  function toCard(t){const size=SIZE_I[t.size]!==undefined?t.size:'M';
+    return {id:t.id,title:t.title||'(untitled)',size,first:t.first||'',tag:t.tag||'',link:t.link||'',due:dueLabel(t.due),dueDate:isDate(t.due)?t.due:'',
+      age:ageOf(t),why:t.project?'part of: '+t.project:'',created:t.createdAt||0,doneToday:t.doneDay===today}}
+  // Logan's dealing order, plus: an S that has been on the list 3+ days rides right after the texts,
+  // and within a group anything due in the next two days comes first, then the oldest.
+  function rankOf(c){if(ANCHOR&&c.id===ANCHOR.id)return [9];
+    const g=c.size==='S'?(c.tag==='text'?0:c.age>=3?1:c.tag==='email'?2:3):3+SIZE_I[c.size];
+    return [g,c.dueDate&&c.dueDate<=addDays(today,2)?0:1,-c.age,c.created,c.id]}
+  function cmp(a,b){const x=rankOf(a),y=rankOf(b);for(let i=0;i<Math.max(x.length,y.length);i++){if(x[i]===y[i])continue;if(x[i]===undefined)return -1;if(y[i]===undefined)return 1;return x[i]<y[i]?-1:1}return 0}
+  function deal(){
+    const list=[...allTasks().values()].filter(inToday).map(toCard);
+    const due=list.filter(c=>c.dueDate&&c.dueDate<=today).sort((a,b)=>(a.doneToday-b.doneToday)||a.dueDate.localeCompare(b.dueDate)||SIZE_I[b.size]-SIZE_I[a.size]);
+    const a=due[0];ANCHOR=a?{id:a.id,text:(a.dueDate<today?'Overdue: ':'Due today: ')+a.title.slice(0,48)+'. The one rule.',doneText:'Done. That was the whole game.'}:null;CFG.anchor=ANCHOR;
+    list.sort(cmp);SEED.splice(0,SEED.length,...list);CFG.goals=goalsFor(Math.max(1,list.length));
+    const n=k=>list.filter(k).length,parts=[];[[n(c=>c.size==='S'),'small'],[n(c=>c.size==='M'),'medium'],[n(c=>c.size==='L'),'large'],[n(c=>c.size==='BOSS'),'boss']].forEach(([k,w])=>{if(k)parts.push(k+' '+w+(k===1?'':w==='boss'?'es':'s'))});
+    CFG.setupSummary=list.length?'Today\'s deck: '+parts.join(', ')+'.':'';
+  }
+  // Fold every device's actions, oldest first, into the shared part of the game state.
+  function rebuild(){
+    const acts=[...mine,...Object.values(others).flat()].filter(a=>a&&a.t).sort((a,b)=>(a.at-b.at)||(a.d<b.d?-1:a.d>b.d?1:0)||(a.n-b.n));
+    const st={done:[],shelved:[],skips:{},opened:{},parked:[],xp:0,tix:0,goal:0,bundle:'',stake:'',seededHeadStart:false};
+    let order=SEED.map(c=>c.id);const has=id=>order.includes(id);
+    for(const a of acts){
+      if(a.t==='setup'){st.goal=a.goal||st.goal;st.bundle=a.bundle||'';st.stake=a.stake||'';if(a.xp&&!st.seededHeadStart){st.xp+=a.xp;st.seededHeadStart=true}}
+      else if(a.t==='done'){if(!st.done.some(d=>d.id===a.id)){st.done.push({id:a.id,title:a.title,size:a.size,xp:a.xp||0,mode:a.mode,note:a.note||'',at:new Date(a.at).toISOString(),beat:!!a.beat});st.xp+=a.xp||0;st.tix+=a.tix||0}}
+      else if(a.t==='skip'){st.skips[a.id]=(st.skips[a.id]||0)+1;if(has(a.id)){order=order.filter(x=>x!==a.id);order.push(a.id)}}
+      else if(a.t==='top'){if(has(a.id)){order=order.filter(x=>x!==a.id);order.unshift(a.id)}}
+      else if(a.t==='shelve'){if(!st.shelved.includes(a.id))st.shelved.push(a.id)}
+      else if(a.t==='open'){if(!st.opened[a.id]){st.opened[a.id]=1;st.xp+=a.xp||0}}
+      else if(a.t==='park'){if(a.text)st.parked.push(a.text)}
+    }
+    Object.assign(S,st);S.order=order;
+  }
+  function act(a){
+    mine.push(Object.assign({},a,{at:Date.now(),d:devId,n:seq++}));
+    try{localStorage.setItem(ACT_KEY,JSON.stringify(mine))}catch(e){}
+    rebuild();write();
+  }
+  async function write(){
+    if(!myDoc||!mine.length)return;if(writing){dirty=true;return}writing=true;
+    try{do{dirty=false;await myDoc.set({device:devId,day:today,acts:mine,updatedAt:new Date().toISOString()})}while(dirty);if(state!=='ok'&&loaded.open)setState('ok')}
+    catch(e){setState(e&&e.code==='quota_exceeded'?'full':'paused')}
+    writing=false;
+  }
+  function setState(s){state=s;const el=$('syncNote');el.hidden=false;
+    el.textContent={loading:'connecting to your deck…',ok:'● synced live',slow:'can\'t reach your deck yet; still trying',paused:'sync paused; your taps are saved on this device',nodb:'this view can\'t reach your deck',full:'deck storage is full'}[s]||''}
+  function refresh(){deal();rebuild();renderAll();maybeSetup()}
+  function maybeSetup(){
+    if(!loaded.open||!loaded.done||!loaded.acts)return;
+    const busy=['focus','reward','recess','add','review','cash','awful'].some(id=>$(id).classList.contains('on'));
+    if(SEED.length&&!S.goal&&!busy&&!setupShown){setupShown=true;renderSetup();$('setup').classList.add('on')}
+  }
+
+  // ── start: subscribe once to today's devices and to the open / done-today tasks ──
+  async function start(){
+    setState('loading');const slow=setTimeout(()=>{if(state==='loading')setState('slow')},10000);
+    $('addHow').textContent='Or type it, one per line. ADD TO DECK puts them on top as they are; "sort it with Claude" sizes them and writes first moves. Prefix with ! for a boss.';
+    $('addChat').hidden=true;$('addClaude').hidden=false;
+    try{db=await window.claude.use('db')}catch(e){db=null}
+    if(!db){clearTimeout(slow);setState('nodb');renderAll();return}
+    myDoc=db.doc('days/'+today+'/devices/'+devId);
+    const fail=e=>{clearTimeout(slow);setState(e&&e.code==='revoked'?'nodb':'paused')};
+    const ready=(k,snap)=>{if(!snap.metadata.fromCache&&!loaded[k]){loaded[k]=true;if(loaded.open&&loaded.done&&loaded.acts){clearTimeout(slow);setState('ok')}}};
+    db.collection('days/'+today+'/devices').onSnapshot(snap=>{
+      for(const k of Object.keys(others))delete others[k];
+      snap.docs.forEach(d=>{const v=d.data()||{};const acts=Array.isArray(v.acts)?v.acts:[];
+        if(d.id===devId){const have=new Set(mine.map(a=>a.n));const extra=acts.filter(a=>!have.has(a.n));if(extra.length){mine=mine.concat(extra).sort((a,b)=>a.n-b.n);seq=Math.max(seq,...mine.map(a=>a.n+1))}}
+        else others[d.id]=acts});
+      ready('acts',snap);rebuild();renderAll();maybeSetup()},fail);
+    const toMap=snap=>new Map(snap.docs.map(d=>[d.id,Object.assign({},d.data(),{id:d.id})]));
+    db.collection('tasks').where('status','==','open').onSnapshot(snap=>{openMap=toMap(snap);ready('open',snap);refresh()},fail);
+    db.collection('tasks').where('doneDay','==',today).onSnapshot(snap=>{doneMap=toMap(snap);ready('done',snap);refresh()},fail);
+    write();
+    try{sample=await window.claude.use('sample')}catch(e){sample=null}
+    if(sample){try{const l=await sample.limits();canImages=!!(l&&l.images)}catch(e){canImages=false}}
+    $('tttSnap').hidden=!canImages;$('addClaude').hidden=!sample;renderAll();
+  }
+
+  // ── tasks ──
+  const newId=()=>'t'+Date.now().toString(36)+rid().slice(0,4);
+  async function putTask(fields){const id=newId();await db.doc('tasks/'+id).set(Object.assign({title:'',size:'M',first:'',tag:'',link:'',due:null,plan:null,project:null,days:[],status:'open',createdAt:Date.now()},fields));return id}
+  function taskDone(c,mode){if(!db||mode!=='done')return;db.doc('tasks/'+c.id).update({status:'done',doneDay:today,doneAt:new Date().toISOString()}).catch(()=>{})}
+  async function addPlain(raw){
+    if(!raw)return;
+    if(raw.startsWith('{')||raw.startsWith('```')||/["“]cards["”]\s*:/.test(raw)){const deck=parseDeck(raw);if(!deck||!Array.isArray(deck.cards)||!deck.cards.length){toast('That JSON didn\'t parse into cards.');return}showReview({cards:deck.cards,projects:[]},'chat');return}
+    if(!db){toast('Can\'t reach your deck yet. Try again in a moment.');return}
+    const lines=raw.split('\n').map(s=>s.trim()).filter(Boolean);const ids=[];
+    try{for(const l of lines){const boss=l.startsWith('!');const title=(boss?l.slice(1):l).trim().slice(0,120);if(!title)continue;
+      ids.push(await putTask({title,size:boss?'BOSS':addSize,first:boss?'Name the smallest visible piece. Do only that.':'',days:[today],src:'quick'}))}}
+    catch(e){toast(e&&e.code==='quota_exceeded'?'Deck storage is full.':'Couldn\'t save those. Try again.');return}
+    ids.slice().reverse().forEach(id=>act({t:'top',id,why:'added'}));act({t:'import',src:'quick',count:ids.length});
+    $('addText').value='';$('add').classList.remove('on');toast(ids.length+' card'+(ids.length===1?'':'s')+' on top of the deck.');
+  }
+
+  // ── Claude reads the list (photo or text) and proposes cards; nothing is written until approved ──
+  function prompt(text){
+    const when=new Date(today+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+    const open=[...openMap.values()].slice(0,150).map(t=>({id:t.id,title:t.title,size:t.size,due:t.due||null}));
+    return `You turn Neal's daily to-do list into cards for Loop Closer, a swipe-deck app for an ADHD brain. Today is ${when} (${today}).
+
+Rules:
+- One card per task on the list. Skip crossed-out lines. Keep Neal's words for the title, start it with a verb, under 80 characters.
+- A card is right-sized when it is one sitting, one place, one verb, and done is visible.
+- size by honest minutes, not dread: "S" up to 5 min (a text, a one-line reply, a booking), "M" about 15 (a real email, a decision, a small fix), "L" about 30 (a doc pass, a draft, a review), "BOSS" 45+ or clearly avoided for weeks. When torn, pick the smaller.
+- first: the literal first two minutes, concrete enough to do half-asleep. For a text, write the actual words to send. Never restate the title. Never use "should", "consider" or "make sure".
+- tag: "text", "email", "call", "errand" or "doc" when it fits, else "".
+- due: a date YYYY-MM-DD only if the list states one ("by Fri", "Friday", "12/3"). A weekday means the next one on or after today. Never invent a deadline. Otherwise null.
+- If a task can't be done in one sitting (example: "clean the guest room for Friday"), put it in "projects" instead of "cards": propose 3 to 7 right-sized subtasks with a plan date each (YYYY-MM-DD, from today up to the due date, never after it), spread so the last day stays light. Leave out work the goal doesn't need and list it in "skipped".
+- match: if a card is the same task as one already open (list below), give that task's id. Otherwise null.
+
+Already open tasks: ${JSON.stringify(open)}
+
+Reply with only this JSON:
+{"cards":[{"title":"","size":"S","tag":"","first":"","due":null,"match":null}],
+ "projects":[{"title":"","due":null,"subtasks":[{"title":"","size":"S","first":"","plan":"${today}"}],"skipped":[]}],
+ "unreadable":[]}
+
+${text?'The list:\n'+text:'The list is the attached photo of a handwritten page. Read every line.'}`;
+  }
+  async function shrinkImage(file){try{const bmp=await createImageBitmap(file);const s=Math.min(1,1800/Math.max(bmp.width,bmp.height));const cv=document.createElement('canvas');cv.width=Math.round(bmp.width*s);cv.height=Math.round(bmp.height*s);cv.getContext('2d').drawImage(bmp,0,0,cv.width,cv.height);return await new Promise(r=>cv.toBlob(b=>r(b||file),'image/jpeg',.85))}catch(e){return file}}
+  const sampleErr=c=>({not_granted:'Claude access is off for this page. Use ADD TO DECK instead.',rate_limited:'Claude is busy or you hit a usage limit. Try again in a minute.',images_unavailable:'Photos can\'t be sent from this view. Type the list instead.',image_rejected:'That photo couldn\'t be sent. Try a JPEG or type the list.',invalid_json:'Claude\'s answer didn\'t come back clean. Try once more.',cancelled:'Cancelled.'}[c]||'Couldn\'t read that. Try again or type the list.');
+  async function readWithClaude(src){
+    if(!sample){toast('Claude isn\'t available here. Use ADD TO DECK.');return}
+    $('addBusy').hidden=false;$('addGo').disabled=true;$('addClaude').disabled=true;
+    try{const opts={modelTier:'default'};if(src.image)opts.images=[await shrinkImage(src.image)];
+      const out=await sample.json(prompt(src.text||''),opts);showReview(out,src.image?'photo':'text')}
+    catch(e){toast(sampleErr(e&&e.code))}
+    finally{$('addBusy').hidden=true;$('addGo').disabled=false;$('addClaude').disabled=false;$('snapFile').value=''}
+  }
+  function clean(c){const size=String(c.size||'M').toUpperCase();return {title:String(c.title||'').trim().slice(0,120),size:SIZE_I[size]!==undefined?size:'M',first:String(c.first||'').slice(0,400),tag:['text','email','call','errand','doc'].includes(c.tag)?c.tag:'',due:isDate(c.due)?c.due:null}}
+  function showReview(out,src){
+    out=out&&typeof out==='object'?out:{};
+    const cards=(Array.isArray(out.cards)?out.cards:[]).map(c=>Object.assign(clean(c),{match:openMap.has(c.match)?c.match:null,keep:true})).filter(c=>c.title);
+    const projects=(Array.isArray(out.projects)?out.projects:[]).map(p=>({title:String(p.title||'Project').slice(0,80),due:isDate(p.due)?p.due:null,skipped:Array.isArray(p.skipped)?p.skipped.map(String).slice(0,8):[],
+      subtasks:(Array.isArray(p.subtasks)?p.subtasks:[]).map(s=>{const c=clean(s);let plan=isDate(s.plan)?s.plan:today;if(plan<today)plan=today;if(isDate(p.due)&&plan>p.due)plan=p.due;return Object.assign(c,{due:null,plan,keep:true})}).filter(s=>s.title)})).filter(p=>p.subtasks.length);
+    const unreadable=(Array.isArray(out.unreadable)?out.unreadable:[]).map(String).slice(0,10);
+    if(!cards.length&&!projects.length){toast(unreadable.length?'Couldn\'t read the list clearly. Try a closer photo.':'No tasks found in that.');return}
+    pending={cards,projects,unreadable,src};$('add').classList.remove('on');renderReview();$('review').classList.add('on');
+  }
+  function row(item,key,sub){const t=item.match?openMap.get(item.match):null;
+    const chips=`<span class="chip ${item.size}" data-sz="${key}">${item.size==='BOSS'?'☠ boss':item.size}</span>`+(item.due?`<span class="chip due">${esc(dueLabel(item.due))}</span>`:'')+(item.plan?`<span class="chip">${esc(dayName(item.plan))}</span>`:'')+(t?`<span class="chip opened">repeat · day ${ageOf(t)+1}</span>`:'');
+    return `<button class="rvrow${sub?' sub':''}${item.keep?'':' off'}" data-k="${key}"><span class="rvk">${item.keep?'✓':'·'}</span><span class="rvt"><b>${esc(item.title)}</b>${item.first?`<span class="note">${esc(item.first)}</span>`:''}</span><span class="chips">${chips}</span></button>`}
+  function renderReview(){const p=pending;let h='';
+    if(p.cards.length)h+=`<div class="rvhead">Cards</div>`+p.cards.map((c,i)=>row(c,'c'+i)).join('');
+    p.projects.forEach((pr,j)=>{h+=`<div class="rvhead">Project · ${esc(pr.title)}${pr.due?` <span class="chip due">${esc(dueLabel(pr.due))}</span>`:''}</div>`+pr.subtasks.map((s,i)=>row(s,'p'+j+'_'+i,true)).join('')+(pr.skipped.length?`<p class="note">Left out on purpose: ${esc(pr.skipped.join(' · '))}. Tell Claude if any of these matter for the deadline.</p>`:'')});
+    if(p.unreadable.length)h+=`<p class="note">Couldn't read: ${esc(p.unreadable.join(' · '))}</p>`;
+    $('rvList').innerHTML=h;const n=p.cards.filter(c=>c.keep).length+p.projects.reduce((a,pr)=>a+pr.subtasks.filter(s=>s.keep).length,0);$('rvGo').textContent=n?'DEAL THESE ('+n+')':'NOTHING TO DEAL';$('rvGo').disabled=!n}
+  function itemAt(k){if(k[0]==='c')return pending.cards[+k.slice(1)];const [j,i]=k.slice(1).split('_').map(Number);return pending.projects[j].subtasks[i]}
+  $('rvList').addEventListener('click',e=>{const sz=e.target.closest('[data-sz]');const r=e.target.closest('.rvrow');if(!r||!pending)return;const it=itemAt(r.dataset.k);
+    if(sz){const order=['S','M','L','BOSS'];it.size=order[(order.indexOf(it.size)+1)%4];it.keep=true}else it.keep=!it.keep;renderReview()});
+  async function applyReview(){
+    const p=pending;if(!p||!db)return;$('rvGo').disabled=true;let made=0,again=0;
+    try{
+      for(const c of p.cards.filter(c=>c.keep)){
+        if(c.match&&openMap.has(c.match)){const t=openMap.get(c.match);const upd={days:[...new Set([...(t.days||[]),today])]};if(c.due)upd.due=c.due;if(c.size!==t.size)upd.size=c.size;await db.doc('tasks/'+c.match).update(upd);again++}
+        else{await putTask({title:c.title,size:c.size,first:c.first,tag:c.tag,due:c.due,days:[today],src:p.src});made++}}
+      for(const pr of p.projects)for(const s of pr.subtasks.filter(s=>s.keep)){await putTask({title:s.title,size:s.size,first:s.first,tag:s.tag,plan:s.plan,project:pr.title,projectDue:pr.due,src:p.src});made++}
+    }catch(e){toast(e&&e.code==='quota_exceeded'?'Deck storage is full.':'Some cards didn\'t save. Try DEAL again.');$('rvGo').disabled=false;return}
+    act({t:'import',src:p.src,count:made+again,repeats:again,dropped:p.cards.filter(c=>!c.keep).length+p.projects.reduce((a,pr)=>a+pr.subtasks.filter(s=>!s.keep).length,0)});
+    pending=null;$('review').classList.remove('on');$('addText').value='';
+    toast(made+' new'+(again?', '+again+' repeat'+(again===1?'':'s')+' moved up':'')+'. Dealt.');
+  }
+  $('rvGo').onclick=applyReview;$('rvClose').onclick=()=>{pending=null;$('review').classList.remove('on')};
+  $('addClaude').onclick=()=>{const t=$('addText').value.trim();if(!t){toast('Type or paste the list first.');return}readWithClaude({text:t})};
+  $('snapFile').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(f)readWithClaude({image:f})});
+  $('stack').addEventListener('click',e=>{if(e.target.closest('[data-snap]')){e.stopPropagation();$('add').classList.add('on')}});
+
+  function emptyHtml(){
+    const msg=state==='nodb'?'This view can\'t reach your deck.':state==='loading'||state==='slow'?'Loading your deck…':'Nothing on today\'s deck yet.';
+    return `<div class="empty"><h3>${state==='ok'||state==='paused'?'NEW DAY':'LOOP CLOSER'}</h3><p>${msg}${state==='ok'?' Write your list on paper, then snap it.':''}</p>${state==='ok'||state==='paused'?'<button class="snapgo" data-snap>📷 ADD TODAY\'S LIST</button>':''}</div>`}
+  function saveNote(){return state==='ok'?'Synced live across your devices. Claude can read today back.':'Saved on this device. It syncs when the connection is back.'}
+  return {act,taskDone,start,addPlain,emptyHtml,saveNote};
+})();
 
 // ───────────────────────── WIRING ─────────────────────────
 $('btnGo').onclick=()=>{const el=topEl();el?flyOut(el,'r',goCard):goCard()};
@@ -664,11 +905,11 @@ $('sndBtn').onclick=()=>{S.sound=!S.sound;save();renderBoard();if(S.sound)snd.ch
 $('helpBtn').onclick=()=>$('helpSheet').classList.add('on');$('helpClose').onclick=()=>$('helpSheet').classList.remove('on');
 $('hacksBtn').onclick=()=>{$('helpSheet').classList.remove('on');$('hacksList').innerHTML=HACKS.map(h=>`<div class="h"><b>${esc(h[0])}</b>${esc(h[1])}</div>`).join('');$('hacksSheet').classList.add('on')};$('hacksClose').onclick=()=>$('hacksSheet').classList.remove('on');
 $('fDone').onclick=()=>completeCard('done');$('fChip').onclick=()=>completeCard('chip');$('fShelve').onclick=shelveCard;
-$('fOpened').onclick=()=>{const c=focusCard;if(!c||S.opened[c.id])return;S.opened[c.id]=1;S.xp+=3;save();$('fOpened').classList.add('done');$('fOpened').textContent='opened ✓';snd.chip();buzz(30);toast('+3. Starting is the hard part and you did it.');renderBoard()};
-$('fParkBtn').onclick=()=>{const v=$('fPark').value.trim();if(!v)return;S.parked.push(v);$('fPark').value='';save();snd.chip();toast('Parked. It\'s safe. Back to the card.')};
+$('fOpened').onclick=()=>{const c=focusCard;if(!c||S.opened[c.id])return;S.opened[c.id]=1;S.xp+=3;T.act({t:'open',id:c.id,xp:3});save();$('fOpened').classList.add('done');$('fOpened').textContent='opened ✓';snd.chip();buzz(30);toast('+3. Starting is the hard part and you did it.');renderBoard()};
+$('fParkBtn').onclick=()=>{const v=$('fPark').value.trim();if(!v)return;S.parked.push(v);T.act({t:'park',text:v,id:focusCard&&focusCard.id});$('fPark').value='';save();snd.chip();toast('Parked. It\'s safe. Back to the card.')};
 $('fPark').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('fParkBtn').click()}});
 document.querySelectorAll('.tpick button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tpick button').forEach(x=>x.classList.remove('on'));b.classList.add('on');startTimer(+b.dataset.m)});
-document.querySelectorAll('#awful .menu button').forEach(b=>b.onclick=()=>{const a=AWFUL[b.dataset.a];$('awful').classList.remove('on');toast('Wall: '+a.label+'. Door: on the card. Chip is enough.');openFocus(current,a.move)});
+document.querySelectorAll('#awful .menu button').forEach(b=>b.onclick=()=>{const a=AWFUL[b.dataset.a];T.act({t:'awful',id:current&&current.id,wall:b.dataset.a});$('awful').classList.remove('on');toast('Wall: '+a.label+'. Door: on the card. Chip is enough.');openFocus(current,a.move)});
 $('awfulClose').onclick=()=>$('awful').classList.remove('on');
 $('recessDone').onclick=()=>{$('recess').classList.remove('on');clearInterval(recessIv);renderAll()};
 $('rChain').onclick=()=>{$('reward').classList.remove('on');clearTimeout($('reward')._t);renderStack();if(current){afterReward();if(!$('recess').classList.contains('on'))openFocus(current)}};
@@ -678,29 +919,32 @@ $('addBtn').onclick=()=>$('add').classList.add('on');$('addClose').onclick=()=>$
 document.querySelectorAll('#add .pills button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#add .pills button').forEach(x=>x.classList.remove('on'));b.classList.add('on');addSize=b.dataset.s});
 $('cashBtn').onclick=openCash;$('cClose').onclick=()=>$('cash').classList.remove('on');
 $('cCopy').onclick=async()=>{try{await navigator.clipboard.writeText(recapText());toast('Recap copied. Paste it to Claude.')}catch(e){toast('Copy blocked. Select the list and copy by hand.')}};
-$('tonightBtn').onclick=()=>{if(!ANCHOR)return;S.order=S.order.filter(x=>x!==ANCHOR.id);S.order.unshift(ANCHOR.id);save();renderStack();toast('On top. Shrink it if you need to.')};
+$('tonightBtn').onclick=()=>{if(!ANCHOR)return;S.order=S.order.filter(x=>x!==ANCHOR.id);S.order.unshift(ANCHOR.id);T.act({t:'top',id:ANCHOR.id,why:'anchor'});save();renderStack();toast('On top. Shrink it if you need to.')};
 
 // ───────────────────────── SETUP (from CFG) ─────────────────────────
 $('cCta').innerHTML='<span>'+esc(CTA.text)+'</span><a class="btn" href="'+esc(CTA.href)+'" target="_blank" rel="noopener">'+esc(CTA.label)+' →</a>';
 $('helpCredit').innerHTML='Loop Closer is by <a href="https://www.logancurrie.com" target="_blank" rel="noopener">Logan Currie</a>. Free, <a href="https://github.com/loganhc-09/loop-closer" target="_blank" rel="noopener">open source</a>. Her Sunday newsletter is <a href="'+esc(CTA.href)+'" target="_blank" rel="noopener">Womansplaining AI</a>.';
 if(CFG.imported){$('resetRow').hidden=false;$('resetDeck').onclick=()=>{try{localStorage.removeItem('loop-closer-import');localStorage.removeItem(KEY)}catch(e){}location.reload()}}
 document.title=CFG.title;$('h1').textContent=CFG.title;$('dateLine').textContent=CFG.dateLine+(CFG.tagline?' · '+CFG.tagline:'');
-$('setupSummary').textContent='Two picks and you\'re dealt in. '+(CFG.setupSummary||'');
 const GOAL_LABELS=['gentle','solid','menace'];
 let pickGoal=CFG.goals[1]||CFG.goals[0]||1,pickBundle=(CFG.bundle[0]||{}).key||'',pickStake='';
-{const cs=cards();const rank={BOSS:0,L:1,M:2,S:3};const cands=Object.values(cs).filter(c=>!c.added).sort((a,b)=>(a.due?-1:0)-(b.due?-1:0)||rank[a.size]-rank[b.size]).slice(0,5);
+// TTT: a function, so the setup sheet can be redrawn once today's tasks arrive from the database.
+function renderSetup(){const cs=cards();const rank={BOSS:0,L:1,M:2,S:3};const cands=Object.values(cs).filter(c=>!c.added&&!S.done.some(d=>d.id===c.id)).sort((a,b)=>(a.due?-1:0)-(b.due?-1:0)||rank[a.size]-rank[b.size]).slice(0,5);
+pickStake='';pickGoal=CFG.goals[1]||CFG.goals[0]||1;
 $('stakePick').innerHTML=cands.map(c=>`<button data-k="${esc(c.id)}">${esc(c.title.split('(')[0].trim().slice(0,34))}</button>`).join('')+'<button data-k="" class="on">no pick</button>';
-document.querySelectorAll('#stakePick button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#stakePick button').forEach(x=>x.classList.remove('on'));b.classList.add('on');pickStake=b.dataset.k})}
+document.querySelectorAll('#stakePick button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#stakePick button').forEach(x=>x.classList.remove('on'));b.classList.add('on');pickStake=b.dataset.k});
 $('goalPick').innerHTML=CFG.goals.map((g,i)=>`<button data-g="${g}" class="${g===pickGoal?'on':''}">${g} · ${GOAL_LABELS[i]||'all'}</button>`).join('');
-$('bundlePick').innerHTML=CFG.bundle.map((b,i)=>`<button data-b="${esc(b.key)}" class="${i===0?'on':''}">${esc(b.label)}</button>`).join('');
 document.querySelectorAll('#goalPick button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#goalPick button').forEach(x=>x.classList.remove('on'));b.classList.add('on');pickGoal=+b.dataset.g});
+$('setupSummary').textContent='Two picks and you\'re dealt in. '+(CFG.setupSummary||'')}
+renderSetup();
+$('bundlePick').innerHTML=CFG.bundle.map((b,i)=>`<button data-b="${esc(b.key)}" class="${i===0?'on':''}">${esc(b.label)}</button>`).join('');
 document.querySelectorAll('#bundlePick button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#bundlePick button').forEach(x=>x.classList.remove('on'));b.classList.add('on');pickBundle=b.dataset.b});
-$('setupGo').onclick=()=>{S.goal=pickGoal;S.bundle=pickBundle;S.stake=pickStake;if(!S.seededHeadStart){S.xp+=15;S.seededHeadStart=true}S.nextSurgeAt=Date.now()+(8+Math.random()*10)*60000;save();$('setup').classList.remove('on');ac();snd.win(1);confetti(80,false);toast('Dealt. +15 XP for showing up. Swipe the small one.');renderAll()};
+$('setupGo').onclick=()=>{const head=!S.seededHeadStart;S.goal=pickGoal;S.bundle=pickBundle;S.stake=pickStake;if(head){S.xp+=15;S.seededHeadStart=true}T.act({t:'setup',goal:pickGoal,bundle:pickBundle,stake:pickStake,xp:head?15:0});S.nextSurgeAt=Date.now()+(8+Math.random()*10)*60000;save();$('setup').classList.remove('on');ac();snd.win(1);confetti(80,false);toast('Dealt. +15 XP for showing up. Swipe the small one.');renderAll()};
 document.addEventListener('keydown',e=>{if(e.target.matches('input,textarea'))return;if($('focus').classList.contains('on')){if(e.key==='Enter')completeCard('done');if(e.key==='Escape')shelveCard();return}if($('reward').classList.contains('on')){if(e.key==='Enter')$('rChain').click();return}if(e.key==='ArrowRight')$('btnGo').click();if(e.key==='ArrowLeft')$('btnNah').click();if(e.key==='a')$('addBtn').click();if(e.key==='d')$('diceBtn').click()});
 document.addEventListener('visibilitychange',async()=>{if(document.visibilityState==='visible'&&$('focus').classList.contains('on')){try{if(navigator.wakeLock&&!wakeLock)wakeLock=await navigator.wakeLock.request('screen')}catch(e){}}});
 setInterval(renderClocks,1000);setInterval(()=>{renderRound();coach()},30000);
 
 renderAll();
-if(!S.goal)$('setup').classList.add('on');
-(async()=>{try{if(!window.claude||!window.claude.use)return;db=await window.claude.use('db');if(!db)return;dbDoc=db.doc('days/'+CFG.day);const snap=await dbDoc.get().catch(()=>null);const remote=snap&&snap.exists&&snap.data?snap.data():null;if(remote&&(remote.xp||0)>S.xp){S.xp=remote.xp;S.tix=remote.tix||0;S.done=remote.done||[];S.shelved=remote.shelved||[];S.skips=remote.skips||{};S.custom=remote.custom||[];S.parked=remote.parked||[];S.goal=remote.goal||S.goal;S.stake=remote.stake||S.stake;save();renderAll()}else save()}catch(e){}})();
+if(!APP&&!S.goal)$('setup').classList.add('on');
+if(APP)T.start();else (async()=>{try{if(!window.claude||!window.claude.use)return;db=await window.claude.use('db');if(!db)return;dbDoc=db.doc('days/'+CFG.day);const snap=await dbDoc.get().catch(()=>null);const remote=snap&&snap.exists&&snap.data?snap.data():null;if(remote&&(remote.xp||0)>S.xp){S.xp=remote.xp;S.tix=remote.tix||0;S.done=remote.done||[];S.shelved=remote.shelved||[];S.skips=remote.skips||{};S.custom=remote.custom||[];S.parked=remote.parked||[];S.goal=remote.goal||S.goal;S.stake=remote.stake||S.stake;save();renderAll()}else save()}catch(e){}})();
 </script>
